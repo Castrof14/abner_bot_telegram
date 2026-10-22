@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 # Letras (inclusive acentuadas), números, espaço, ponto, hífen e _; nunca barras.
@@ -130,6 +130,7 @@ class DenialReview:
     category: str         # motivo da confirmação
     offer: bool           # pode ser aprovada pelo Telegram?
     reason: str = ""      # por que não pode (se offer=False)
+    dirs: list[str] = field(default_factory=list)  # pastas fora do projeto liberadas com --add-dir
 
 
 def _paths_outside(command: str, project: Path) -> list[str]:
@@ -148,6 +149,38 @@ def _paths_outside(command: str, project: Path) -> list[str]:
     return bad
 
 
+# Pastas da home que nunca são liberadas, mesmo com aprovação.
+SENSITIVE_HOME_DIRS = (".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".claude", ".config", "Library")
+
+
+def _outside_problem(p: Path) -> str | None:
+    """Motivo para recusar um caminho fora do projeto, ou None se puder ser aprovado."""
+    p = p.expanduser().resolve()
+    home = Path.home().resolve()
+    if not is_within(p, home) or p == home:
+        return f"{p} fica fora da sua pasta pessoal"
+    top = p.relative_to(home).parts[0]
+    if top in SENSITIVE_HOME_DIRS:
+        return f"{p} é uma pasta protegida"
+    return None
+
+
+def _grant_dir(p: Path) -> str:
+    """Pasta existente mais próxima a liberar com --add-dir para acessar `p`."""
+    p = p.expanduser().resolve()
+    d = p.parent
+    while not d.is_dir() and d != d.parent:
+        d = d.parent
+    return str(d)
+
+
+def _file_rule(tool: str, p: Path) -> str:
+    # O Claude Code só aplica regras com caminho na forma Edit(...) (vale para Write/MultiEdit/NotebookEdit)
+    # e Read(...); "//" indica caminho absoluto. Verificado na CLI 2.1.308: Write(<caminho>) é ignorada.
+    kind = "Read" if tool == "Read" else "Edit"
+    return f"{kind}(/{p.resolve()})"
+
+
 def review_denial(denial: dict, project: Path) -> DenialReview:
     tool = denial.get("tool_name", "?")
     inp = denial.get("tool_input") or {}
@@ -160,21 +193,33 @@ def review_denial(denial: dict, project: Path) -> DenialReview:
         for rx in BLOCKED:
             if rx.search(cmd):
                 return DenialReview(tool, summary, None, category, False, "comando bloqueado pela política do TeleAgent")
-        if category in ("excluir arquivos", "mover/sobrescrever", "alterar permissões"):
-            outside = _paths_outside(cmd, project)
-            if outside:
-                return DenialReview(tool, summary, None, category, False,
-                                    f"afeta caminhos fora do projeto: {', '.join(outside[:3])}")
-        return DenialReview(tool, summary, f"{tool}({cmd})", category, True)
+        outside = _paths_outside(cmd, project)
+        if not outside:
+            return DenialReview(tool, summary, f"{tool}({cmd})", category, True)
+        if category == "excluir arquivos":
+            return DenialReview(tool, summary, None, category, False,
+                                f"exclusão fora do projeto: {', '.join(outside[:3])}")
+        paths = [project / Path(t).expanduser() for t in outside]
+        problem = next((m for m in map(_outside_problem, paths) if m), None)
+        if problem:
+            return DenialReview(tool, summary, None, category, False, problem)
+        if category == "comando não pré-aprovado":
+            category = "fora do projeto"
+        dirs = list(dict.fromkeys(_grant_dir(x) for x in paths))
+        return DenialReview(tool, summary, f"{tool}({cmd})", category, True, dirs=dirs)
     if tool in ("Edit", "Write", "NotebookEdit", "MultiEdit", "Read"):
         fp = inp.get("file_path") or inp.get("notebook_path") or ""
         p = Path(fp)
         if fp and not p.is_absolute():
             p = project / p
-        if not fp or not is_within(p, project):
-            return DenialReview(tool, fp or "(sem caminho)", None, "fora do projeto", False,
-                                "operações de arquivo são restritas ao diretório do projeto")
-        return DenialReview(tool, fp, f"{tool}({fp})", "arquivo", True)
+        if not fp:
+            return DenialReview(tool, "(sem caminho)", None, "arquivo", False, "sem caminho")
+        if not is_within(p, project):
+            problem = _outside_problem(p)
+            if problem:
+                return DenialReview(tool, fp, None, "fora do projeto", False, problem)
+            return DenialReview(tool, fp, _file_rule(tool, p), "fora do projeto", True, dirs=[_grant_dir(p)])
+        return DenialReview(tool, fp, _file_rule(tool, p), "arquivo", True)
     if tool in ("WebFetch", "WebSearch"):
         target = inp.get("url") or inp.get("query") or ""
         return DenialReview(tool, str(target)[:200], tool, "acesso à internet", True)

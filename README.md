@@ -163,6 +163,15 @@ momento para um diagnóstico completo.
 | `/publicar [mensagem]` | Mostra as alterações e, após confirmação, faz commit + push (nunca `--force`). Bloqueia se houver `.env`, chaves ou padrões de segredo |
 | `/novo` | Esquece a sessão do Claude Code do projeto nesta máquina (a memória continua) |
 | `/logs` | Final do log |
+| `/agentes` | Lista os agentes de IA com botões para ver, usar, trocar motor/modelo, editar instruções ou apagar |
+| `/agente novo NOME` | Cria um agente: escolhe o motor (**Claude Code** ou **OpenCode**), o modelo (Sonnet/Opus/Haiku ou os modelos 🆓 grátis do OpenCode, ou digita outro) e as instruções |
+| `/agente usar\|modelo\|instrucoes\|apagar NOME` | Atalhos; `/agente nenhum` volta ao runner padrão |
+
+**Agentes**: um agente é um perfil (motor + modelo + instruções). O agente em uso no projeto selecionado
+define qual CLI roda a tarefa e com qual modelo; as instruções são acrescentadas ao prompt. Sem projeto
+selecionado, “usar” define o agente padrão. Ficam em `data/agents.json` (local a cada máquina, não
+sincronizado). Ao trocar de motor, a tarefa seguinte começa uma sessão nova (a memória do projeto continua).
+Aprovações de ações negadas só funcionam com agentes Claude Code.
 
 **Tarefas**: qualquer texto (que não seja comando) é enviado como tarefa ao Claude Code no projeto
 selecionado. Uma tarefa por vez; mensagens enviadas durante uma tarefa são recusadas com aviso.

@@ -55,6 +55,12 @@ def _split(value: str | None) -> list[str]:
     return [v.strip() for v in value.split(";") if v.strip()]
 
 
+def _find_opencode(explicit: str | None = None) -> str | None:
+    """Localiza o executável do opencode CLI."""
+    from .opencode_runner import find_opencode_bin
+    return find_opencode_bin(explicit)
+
+
 def find_claude_bin(explicit: str | None = None) -> str | None:
     """Localiza o executável da CLI do Claude Code (não inventa API: usa a CLI instalada)."""
     if explicit:
@@ -97,6 +103,9 @@ class Config:
     claude_bin: str | None = None
     claude_model: str = ""
     claude_max_budget_usd: float | None = None
+    opencode_bin: str | None = None
+    opencode_model: str = ""      # ex: "opencode/cat-jam-free" ou "anthropic/claude-sonnet-4-5"
+    default_runner: str = "claude"  # "claude" ou "opencode"
     task_timeout: int = 3600
     allowed_tools: list[str] = field(default_factory=lambda: list(DEFAULT_ALLOWED_TOOLS))
     denied_tools: list[str] = field(default_factory=lambda: list(DEFAULT_DENIED_TOOLS))
@@ -185,4 +194,7 @@ def load_config(env_file: Path = ENV_FILE, base_dir: Path = BASE_DIR) -> Config:
         heartbeat_minutes=_num("HEARTBEAT_MINUTES", 20.0, float),
         log_level=(raw.get("LOG_LEVEL") or "INFO").upper(),
         base_dir=base_dir,
+        opencode_bin=_find_opencode((raw.get("OPENCODE_BIN") or "").strip() or None),
+        opencode_model=(raw.get("OPENCODE_MODEL") or "").strip(),
+        default_runner=(raw.get("DEFAULT_RUNNER") or "claude").strip().lower(),
     )

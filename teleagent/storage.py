@@ -80,14 +80,42 @@ class LocalState:
         self.data["selected_project"] = name
         self.save()
 
-    def session_for(self, project: str) -> str | None:
-        return self.data["sessions"].get(project)
+    def session_for(self, project: str, runner: str | None = None) -> str | None:
+        """Sessão salva do projeto; com `runner`, só se ela foi criada por esse motor."""
+        sid = self.data["sessions"].get(project)
+        if sid and runner and self.data.get("session_runners", {}).get(project, "claude") != runner:
+            return None
+        return sid
 
-    def set_session(self, project: str, session_id: str | None) -> None:
+    def set_session(self, project: str, session_id: str | None, runner: str = "claude") -> None:
+        runners = self.data.setdefault("session_runners", {})
         if session_id:
             self.data["sessions"][project] = session_id
+            runners[project] = runner
         else:
             self.data["sessions"].pop(project, None)
+            runners.pop(project, None)
+        self.save()
+
+    # Agente selecionado por projeto; a chave "*" guarda o agente padrão (sem projeto).
+    def agent_for(self, project: str | None, inherit: bool = True) -> str | None:
+        agents = self.data.get("agents") or {}
+        own = agents.get(project) if project else None
+        return own or (agents.get("*") if inherit or not project else None)
+
+    def set_agent(self, project: str | None, agent: str | None) -> None:
+        agents = self.data.setdefault("agents", {})
+        key = project or "*"
+        if agent:
+            agents[key] = agent
+        else:
+            agents.pop(key, None)
+        self.save()
+
+    def forget_agent(self, agent: str) -> None:
+        agents = self.data.get("agents") or {}
+        for key in [k for k, v in agents.items() if v == agent]:
+            agents.pop(key)
         self.save()
 
     @property

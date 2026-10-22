@@ -50,6 +50,10 @@ def test_build_args_uses_documented_flags(cfg):
     assert "Bash(rm build.log)" in args and "Bash(rm:*)" not in args and "Bash(git push:*)" in args
     assert args[args.index("--resume") + 1] == "abc"
     assert args[args.index("--max-budget-usd") + 1] == "2"
+    assert "--add-dir" not in args
+    args = r.build_args(extra_dirs=["/tmp/a", "/tmp/b"])
+    i = args.index("--add-dir")
+    assert args[i + 1:i + 3] == ["/tmp/a", "/tmp/b"]
 
 
 def test_run_parses_stream_and_denials(cfg, monkeypatch, tmp_path):

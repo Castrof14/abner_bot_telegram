@@ -122,7 +122,8 @@ class ClaudeRunner:
         return self._proc is not None and self._proc.returncode is None
 
     def build_args(self, *, resume: str | None = None, session_id: str | None = None,
-                   extra_allowed: list[str] | None = None) -> list[str]:
+                   extra_allowed: list[str] | None = None, extra_dirs: list[str] | None = None,
+                   model: str | None = None) -> list[str]:
         extra_allowed = extra_allowed or []
         args = resolve_command(self.claude_bin) + [
             "-p", "--output-format", "stream-json", "--verbose",
@@ -134,8 +135,11 @@ class ClaudeRunner:
             args += ["--allowedTools", *allowed]
         if denied:
             args += ["--disallowedTools", *denied]
-        if self.model:
-            args += ["--model", self.model]
+        if extra_dirs:
+            args += ["--add-dir", *extra_dirs]
+        model = model or self.model
+        if model:
+            args += ["--model", model]
         if self.max_budget:
             args += ["--max-budget-usd", f"{self.max_budget:g}"]
         if resume:
@@ -165,11 +169,13 @@ class ClaudeRunner:
             return None
 
     async def run(self, cwd: Path, prompt: str, *, resume: str | None = None, session_id: str | None = None,
-                  extra_allowed: list[str] | None = None, on_progress: ProgressCallback | None = None,
+                  extra_allowed: list[str] | None = None, extra_dirs: list[str] | None = None,
+                  model: str | None = None, on_progress: ProgressCallback | None = None,
                   log_name: str = "task") -> RunResult:
         if self.running:
             raise RuntimeError("Já existe uma execução do Claude Code em andamento.")
-        args = self.build_args(resume=resume, session_id=session_id, extra_allowed=extra_allowed)
+        args = self.build_args(resume=resume, session_id=session_id, extra_allowed=extra_allowed,
+                               extra_dirs=extra_dirs, model=model)
         env = {k: v for k, v in os.environ.items() if k not in STRIP_ENV}
         result = RunResult()
         log_path = None

@@ -5,6 +5,7 @@ import asyncio
 import functools
 import html
 import io
+import json
 import logging
 import secrets as pysecrets
 import time
@@ -17,7 +18,10 @@ from telegram.ext import (Application, ApplicationBuilder, CallbackQueryHandler,
                           ContextTypes, MessageHandler, filters)
 
 from . import deps
+from .agents import (AGENT_NAME_RE, CLAUDE_MODELS, RUNNERS, Agent, AgentStore, is_free_model, opencode_models,
+                     runner_label)
 from .claude_runner import ClaudeRunner, Progress, RunResult
+from .opencode_runner import OpenCodeRunner, OpenCodeResult, OpenCodeDenial
 from .config import Config
 from .gitsync import GitSync, git, project_git_info, project_safe_pull
 from .instance_lock import Lease, LocalInstanceLock
@@ -42,6 +46,8 @@ COMMANDS = [
     ("sync", "Sincroniza a memória com o repositório Git"),
     ("publicar", "Commit + push do projeto (com confirmação)"),
     ("novo", "Inicia uma sessão nova do Claude Code no projeto"),
+    ("agentes", "Lista, cria e seleciona agentes de IA (Claude ou OpenCode)"),
+    ("agente", "Cria/edita um agente: /agente novo NOME"),
     ("logs", "Últimas linhas do log"),
 ]
 
@@ -60,6 +66,9 @@ HELP_TEXT = """\
 /sync — sincroniza a memória agora
 /publicar [mensagem] — commit e push do projeto (com confirmação)
 /novo — esquece a sessão do Claude Code deste projeto nesta máquina
+/agentes — lista os agentes de IA e escolhe qual usar no projeto
+/agente novo NOME — cria um agente (motor Claude ou OpenCode, modelo e instruções)
+  <code>/agente NOME</code> — ver/usar/editar · <code>/agente usar|modelo|instrucoes|apagar NOME</code>
 /logs — final do log
 
 <b>Tarefas</b>: com um projeto selecionado, envie o pedido em texto normal.
@@ -71,13 +80,17 @@ Você está trabalhando no projeto "{name}" (diretório atual: {path}), a pedido
 Telegram (TeleAgent, máquina "{machine}").
 
 Regras desta sessão:
-- Trabalhe somente dentro deste diretório.
+- Trabalhe dentro deste diretório. Se a tarefa pedir algo fora dele (criar ou mover pastas em outro lugar), \
+tente a ação diretamente com o caminho completo: ela será negada e o proprietário poderá aprová-la pelo Telegram.
+- Para criar ou alterar arquivos (dentro ou fora do projeto) use sempre as ferramentas Write/Edit, nunca \
+Bash com echo, cat, heredoc ou redirecionamento. Comandos Bash devem ter uma linha só e fazer uma coisa só: \
+comandos multilinha ou encadeados não podem ser aprovados pelo Telegram.
 - Ações não pré-aprovadas (excluir ou mover arquivos, alterar permissões, push/publicação, comandos \
 fora da lista segura) são negadas automaticamente. NÃO tente contorná-las com outros comandos: \
 termine o que for possível e diga claramente o que precisa de aprovação.
 - Nunca exiba nem grave segredos (tokens, senhas, chaves).
 - Responda em português, de forma objetiva: a resposta será lida no Telegram.
-
+{agent_section}
 Memória persistente do projeto (pode vir de outro computador):
 {context}
 
@@ -85,6 +98,20 @@ Memória persistente do projeto (pode vir de outro computador):
 {task}
 
 {memory_instructions}"""
+
+
+AGENT_USAGE = """\
+Agentes de IA
+/agentes — lista e seleciona
+/agente novo NOME — cria (escolhe motor, modelo e instruções)
+/agente NOME — mostra o agente com botões
+/agente usar NOME — usa no projeto selecionado (ou como padrão)
+/agente nenhum — volta ao runner padrão
+/agente modelo NOME — troca motor/modelo
+/agente instrucoes NOME [TEXTO] — define as instruções
+/agente apagar NOME"""
+
+AWAIT_TTL = 15 * 60
 
 
 class StartupError(Exception):
@@ -127,6 +154,14 @@ class TeleAgentBot:
         self.local_lock = LocalInstanceLock(cfg.data_dir / "teleagent.lock")
         self.runner = ClaudeRunner(cfg.claude_bin, cfg.allowed_tools, cfg.denied_tools, cfg.claude_model,
                                    cfg.claude_max_budget_usd, cfg.task_timeout, cfg.log_dir / "tasks")
+        self.opencode = OpenCodeRunner(cfg.opencode_bin, cfg.opencode_model,
+                                       cfg.task_timeout, cfg.log_dir / "tasks")
+        # Runner ativo por projeto: {"projeto": "claude"|"opencode"}
+        self._project_runner: dict[str, str] = {}
+        self._default_runner: str = cfg.default_runner  # "claude" ou "opencode"
+        self.agents = AgentStore(cfg.data_dir / "agents.json")
+        # Próxima mensagem de texto esperada por um assistente (ex.: instruções de um agente).
+        self._awaiting: dict | None = None
         # O próprio TeleAgent (código, .env com o token, memória) nunca é um projeto.
         self.excluded = [cfg.base_dir.resolve()]
         self.app: Application | None = None
@@ -150,6 +185,7 @@ class TeleAgentBot:
             "projetos": self.cmd_projetos, "projeto": self.cmd_projetos, "criar": self.cmd_criar, "memoria": self.cmd_memoria,
             "continuar": self.cmd_continuar, "parar": self.cmd_parar, "instalar": self.cmd_instalar,
             "sync": self.cmd_sync, "publicar": self.cmd_publicar, "novo": self.cmd_novo, "logs": self.cmd_logs,
+            "runner": self.cmd_runner, "agentes": self.cmd_agentes, "agente": self.cmd_agente,
         }
         for name, fn in handlers.items():
             app.add_handler(CommandHandler(name, fn))
@@ -369,12 +405,17 @@ class TeleAgentBot:
 
     @owner_only
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        cur = self.current_project()
         lines = [f"🖥️ Máquina: {self.cfg.machine_name}"]
+        runner, model, agent = self._active_profile(cur[0] if cur else None)
+        lines.append(f"⚙️ Runner ativo: {runner_label(runner)} / modelo {model or 'padrão'} "
+                     f"— agente: {agent.name if agent else 'nenhum'} (mude com /agentes)")
         lines.append(f"🤖 Claude Code: {await self.runner.version()}")
         auth = await self.runner.auth_status()
         if auth is not None:
             lines.append(f"🔐 Login Claude: {'ok' if auth.get('loggedIn') else 'NÃO autenticado — rode `claude` e faça login'}")
-        cur = self.current_project()
+        oc_ver = await self.opencode.version() if self.opencode.opencode_bin else "não instalado"
+        lines.append(f"🔀 opencode: {oc_ver}")
         if cur:
             name, path = cur
             lines.append(f"📁 Projeto: {name} ({path})")
@@ -635,6 +676,308 @@ class TeleAgentBot:
                                                       "(a memória do projeto continua sendo usada).")
 
     @owner_only
+    async def cmd_runner(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Troca o runner do projeto atual: /runner claude | /runner opencode [modelo]"""
+        cur = self.current_project()
+        args = (context.args or [])
+        if not args:
+            name = cur[0] if cur else "(nenhum)"
+            active = self._active_runner_name(cur[0] if cur else None)
+            oc_ver = await self.opencode.version() if self.opencode.opencode_bin else "não instalado"
+            await update.effective_message.reply_text(
+                f"Runner atual do projeto <b>{name}</b>: <b>{active}</b>\n\n"
+                f"Claude Code: {await self.runner.version()}\n"
+                f"opencode: {oc_ver}\n\n"
+                "Para trocar:\n"
+                "  /runner claude\n"
+                "  /runner opencode\n"
+                "  /runner opencode opencode/cat-jam-free\n"
+                "  /runner opencode anthropic/claude-sonnet-4-5",
+                parse_mode="HTML",
+            )
+            return
+        choice = args[0].lower()
+        if choice not in ("claude", "opencode"):
+            await update.effective_message.reply_text("Use: /runner claude  ou  /runner opencode [modelo]")
+            return
+        if choice == "opencode" and not self.opencode.opencode_bin:
+            await update.effective_message.reply_text("⚠️ opencode CLI não encontrado. Instale com:\n  npm i -g opencode-ai")
+            return
+        model_override = args[1] if len(args) > 1 else ""
+        self.state.set_agent(cur[0] if cur else None, None)
+        if cur:
+            self._project_runner[cur[0]] = choice
+            if model_override:
+                self._project_runner[cur[0] + ":model"] = model_override
+            elif cur[0] + ":model" in self._project_runner:
+                del self._project_runner[cur[0] + ":model"]
+        else:
+            self._default_runner = choice
+        name = cur[0] if cur else "(global)"
+        model_info = f" com modelo {model_override}" if model_override else ""
+        await update.effective_message.reply_text(
+            f"✅ Runner do projeto <b>{name}</b> definido para <b>{choice}</b>{model_info}.\n"
+            f"A próxima tarefa já usará o novo runner.",
+            parse_mode="HTML",
+        )
+
+    def _active_runner_name(self, project: str | None) -> str:
+        if project and project in self._project_runner:
+            return self._project_runner[project]
+        return self._default_runner
+
+    def _active_profile(self, project: str | None) -> tuple[str, str, Agent | None]:
+        """(motor, modelo, agente) usados nas tarefas do projeto. Agente do projeto > /runner do projeto >
+        agente padrão > runner padrão."""
+        inherit = not (project and project in self._project_runner)
+        agent = self.agents.get(self.state.agent_for(project, inherit=inherit))
+        if agent:
+            return agent.runner, agent.model, agent
+        runner = self._active_runner_name(project)
+        if runner == "opencode":
+            return runner, (project and self._project_runner.get(project + ":model")) or self.cfg.opencode_model, None
+        return runner, self.cfg.claude_model, None
+
+    # ------------------------------------------------------------ agentes
+
+    @owner_only
+    async def cmd_agentes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._show_agents()
+
+    @owner_only
+    async def cmd_agente(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        args = context.args or []
+        reply = update.effective_message.reply_text
+        if not args:
+            await reply(AGENT_USAGE)
+            return
+        sub, name = args[0].lower(), (args[1] if len(args) > 1 else "")
+        if sub in ("novo", "criar"):
+            if not AGENT_NAME_RE.match(name):
+                await reply("Uso: /agente novo NOME (1 a 32 letras, números, - ou _). Ex.: /agente novo revisor")
+            elif self.agents.get(name):
+                await reply(f"Já existe o agente '{name}'. Use /agente {name} para editá-lo.")
+            else:
+                await self._ask_runner(name, new=True)
+            return
+        if sub in ("lista", "listar"):
+            await self._show_agents()
+            return
+        if sub == "nenhum":
+            await self._use_agent(None)
+            return
+        if sub not in ("usar", "ver", "modelo", "instrucoes", "instruções", "apagar"):
+            name, sub = args[0], "ver"
+        agent = self.agents.get(name)
+        if not agent:
+            await reply(f"Agente '{name}' não encontrado. Veja /agentes ou crie com /agente novo NOME.")
+            return
+        if sub == "usar":
+            await self._use_agent(agent.name)
+        elif sub == "ver":
+            await self._show_agent(agent)
+        elif sub == "modelo":
+            await self._ask_runner(agent.name, new=False)
+        elif sub in ("instrucoes", "instruções"):
+            text = " ".join(args[2:]).strip()
+            if text:
+                await self._save_instructions(agent.name, text)
+            else:
+                await self._ask_instructions(agent.name, new=False)
+        elif sub == "apagar":
+            await self._confirm_delete_agent(agent.name)
+
+    async def _show_agents(self) -> None:
+        project = self.state.selected_project
+        current = self._active_profile(project)[2]
+        agents = self.agents.list()
+        if not agents:
+            await self.notify("Nenhum agente criado ainda.\nCrie um com /agente novo NOME (ex.: /agente novo revisor): "
+                              "você escolhe o motor (Claude Code ou OpenCode com modelos grátis), o modelo e as "
+                              "instruções.")
+            return
+        where = f"no projeto {project}" if project else "como padrão"
+        lines = [f"🤖 Agentes ({len(agents)}) — em uso {where}: {current.name if current else 'nenhum'}"]
+        for a in agents:
+            free = " 🆓" if is_free_model(a.model) else ""
+            lines.append(f"{'✅' if current and a.name == current.name else '•'} {a.name} — "
+                         f"{runner_label(a.runner)} / {a.model or 'padrão'}{free}")
+        lines.append("\nToque num agente para ver, usar ou editar. Novo: /agente novo NOME")
+        buttons = [InlineKeyboardButton(("✅ " if current and a.name == current.name else "") + a.name,
+                                        callback_data=f"ag:show:{a.name}") for a in agents[:40]]
+        rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        if current:
+            rows.append([InlineKeyboardButton("🚫 Não usar agente", callback_data="ag:none:")])
+        await self.notify("\n".join(lines), markup=InlineKeyboardMarkup(rows))
+
+    async def _show_agent(self, agent: Agent) -> None:
+        project = self.state.selected_project
+        current = self._active_profile(project)[2]
+        text = agent.describe()
+        if current and current.name == agent.name:
+            text += f"\n\n✅ Em uso {'no projeto ' + project if project else 'como padrão'}"
+        use = f"✅ Usar em {truncate(project, 20)}" if project else "✅ Usar como padrão"
+        n = agent.name
+        await self.notify(text, markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(use, callback_data=f"ag:use:{n}"),
+             InlineKeyboardButton("🔀 Motor/modelo", callback_data=f"ag:model:{n}")],
+            [InlineKeyboardButton("📝 Instruções", callback_data=f"ag:instr:{n}"),
+             InlineKeyboardButton("🗑️ Apagar", callback_data=f"ag:del:{n}")]]))
+
+    async def _use_agent(self, name: str | None) -> None:
+        project = self.state.selected_project
+        self.state.set_agent(project, name)
+        if project:
+            self._project_runner.pop(project, None)
+            self._project_runner.pop(project + ":model", None)
+        runner, model, agent = self._active_profile(project)
+        where = f"no projeto {project}" if project else "como padrão (projetos sem agente próprio)"
+        who = f"agente {agent.name}" if agent else "nenhum agente"
+        lines = [f"✅ Em uso {where}: {who}", f"   motor: {runner_label(runner)} / modelo: {model or 'padrão'}",
+                 "A próxima tarefa já usa essa configuração."]
+        if runner == "opencode" and not self.opencode.opencode_bin:
+            lines.append("⚠️ opencode CLI não encontrado nesta máquina. Instale com: npm i -g opencode-ai")
+        await self.notify("\n".join(lines))
+
+    async def _ask_runner(self, name: str, new: bool) -> None:
+        tok = self._token({"action": "agent_runner", "name": name, "new": new})
+        await self.notify(f"{'🆕 Novo agente' if new else '🔀 Agente'} {name}: qual motor de IA?\n"
+                          "• Claude Code — usa sua conta Claude (Sonnet, Opus, Haiku)\n"
+                          "• OpenCode — modelos gratuitos do OpenCode Zen (e outros provedores configurados)",
+                          markup=InlineKeyboardMarkup([[
+                              InlineKeyboardButton("🟣 Claude Code", callback_data=f"agr:{tok}:claude"),
+                              InlineKeyboardButton("🆓 OpenCode", callback_data=f"agr:{tok}:opencode")]]))
+
+    async def _ask_model(self, name: str, runner: str, new: bool) -> None:
+        if runner == "claude":
+            models = [m for m, _ in CLAUDE_MODELS]
+            labels = [label for _, label in CLAUDE_MODELS]
+        else:
+            models = (await opencode_models(self.opencode.opencode_bin))[:30]
+            labels = [("🆓 " if is_free_model(m) else "") + m.removeprefix("opencode/") for m in models]
+        tok = self._token({"action": "agent_model", "name": name, "runner": runner, "new": new, "models": models})
+        buttons = [InlineKeyboardButton(truncate(label, 40), callback_data=f"agm:{tok}:{i}")
+                   for i, label in enumerate(labels)]
+        rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        rows.append([InlineKeyboardButton("✏️ Digitar outro", callback_data=f"agm:{tok}:x")])
+        extra = "" if models else "\n(não consegui listar os modelos do opencode; digite o nome)"
+        await self.notify(f"Modelo do agente {name} ({runner_label(runner)}):{extra}",
+                          markup=InlineKeyboardMarkup(rows))
+
+    async def _save_agent_model(self, name: str, runner: str, model: str, new: bool) -> None:
+        agent = self.agents.get(name) or Agent(name=name)
+        agent.runner, agent.model = runner, model
+        try:
+            self.agents.put(agent)
+        except ValueError as e:
+            await self.notify(f"❌ {e}")
+            return
+        free = " 🆓 (grátis)" if is_free_model(model) else ""
+        await self.notify(f"✅ {name}: {runner_label(runner)} / {model or 'padrão'}{free}")
+        if new:
+            await self._ask_instructions(name, new=True)
+        else:
+            await self._show_agent(agent)
+
+    async def _ask_instructions(self, name: str, new: bool) -> None:
+        self._awaiting = {"kind": "agent_instructions", "name": name, "ts": time.time()}
+        agent = self.agents.get(name)
+        current = f"\n\nAtuais: {truncate(agent.instructions, 500)}" if agent and agent.instructions else ""
+        buttons = [InlineKeyboardButton("⏭️ Pular" if new else "Cancelar", callback_data=f"agi:skip:{name}")]
+        if not new and agent and agent.instructions:
+            buttons.append(InlineKeyboardButton("🧹 Limpar", callback_data=f"agi:clear:{name}"))
+        await self.notify(f"📝 Envie agora, numa mensagem, as instruções do agente {name}: papel, estilo e regras.\n"
+                          "Ex.: \"Você é um revisor de código rigoroso. Aponte bugs e sugira testes.\"\n"
+                          f"(A próxima mensagem de texto será usada como instruções.){current}",
+                          markup=InlineKeyboardMarkup([buttons]))
+
+    async def _save_instructions(self, name: str, text: str) -> None:
+        agent = self.agents.get(name)
+        if not agent:
+            await self.notify(f"Agente '{name}' não encontrado.")
+            return
+        agent.instructions = redact(text, self.secrets).strip()
+        self.agents.put(agent)
+        await self.notify("✅ Instruções salvas.")
+        await self._show_agent(agent)
+
+    async def _confirm_delete_agent(self, name: str) -> None:
+        tok = self._token({"action": "agent_delete", "name": name})
+        await self.notify(f"Apagar o agente '{name}'? Projetos que o usam voltam ao runner padrão.",
+                          markup=InlineKeyboardMarkup([[
+                              InlineKeyboardButton("🗑️ Apagar", callback_data=f"ok:{tok}"),
+                              InlineKeyboardButton("Cancelar", callback_data=f"no:{tok}")]]))
+
+    async def _handle_awaiting(self, text: str) -> bool:
+        """Entrega o texto ao assistente que o pediu. False = não havia nada esperando."""
+        aw, self._awaiting = self._awaiting, None
+        if not aw or time.time() - aw["ts"] > AWAIT_TTL:
+            return False
+        if aw["kind"] == "agent_instructions":
+            await self._save_instructions(aw["name"], text)
+        elif aw["kind"] == "agent_model":
+            model = text.strip()
+            if " " in model or len(model) > 100:
+                self._awaiting = {**aw, "ts": time.time()}
+                await self.notify("Nome de modelo inválido. Envie só o identificador, ex.: opencode/big-pickle")
+                return True
+            await self._save_agent_model(aw["name"], aw["runner"], model, aw["new"])
+        return True
+
+    async def _agent_callback(self, data: str) -> None:
+        kind, _, rest = data.partition(":")
+        if kind in ("ag", "agi"):
+            action, _, name = rest.partition(":")
+            if kind == "ag" and action == "none":
+                await self._use_agent(None)
+                return
+            agent = self.agents.get(name)
+            if not agent:
+                await self.notify("Agente não encontrado (foi apagado?). Veja /agentes.")
+                return
+            if kind == "agi":
+                self._awaiting = None
+                if action == "clear":
+                    agent.instructions = ""
+                    self.agents.put(agent)
+                    await self.notify("🧹 Instruções removidas.")
+                await self._show_agent(agent)
+            elif action == "show":
+                await self._show_agent(agent)
+            elif action == "use":
+                await self._use_agent(agent.name)
+            elif action == "model":
+                await self._ask_runner(agent.name, new=False)
+            elif action == "instr":
+                await self._ask_instructions(agent.name, new=False)
+            elif action == "del":
+                await self._confirm_delete_agent(agent.name)
+            return
+        tok, _, choice = rest.partition(":")
+        item = self.pending.pop(tok, None)
+        if not item:
+            await self.notify("Este pedido expirou; comece de novo com /agentes.")
+            return
+        if kind == "agr" and choice in RUNNERS:
+            if choice == "opencode" and not self.opencode.opencode_bin:
+                await self.notify("⚠️ opencode CLI não encontrado nesta máquina. Instale com: npm i -g opencode-ai")
+                return
+            await self._ask_model(item["name"], choice, item["new"])
+        elif kind == "agm":
+            if choice == "x":
+                self._awaiting = {"kind": "agent_model", "name": item["name"], "runner": item["runner"],
+                                  "new": item["new"], "ts": time.time()}
+                example = "sonnet, opus, claude-sonnet-4-5" if item["runner"] == "claude" else "opencode/big-pickle"
+                await self.notify(f"Envie o nome do modelo (ex.: {example}).")
+                return
+            try:
+                model = item["models"][int(choice)]
+            except (ValueError, IndexError):
+                await self.notify("Opção inválida; use /agente modelo NOME.")
+                return
+            await self._save_agent_model(item["name"], item["runner"], model, item["new"])
+
+    @owner_only
     async def cmd_logs(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         logf = self.cfg.log_dir / "teleagent.log"
         tail = ""
@@ -662,6 +1005,8 @@ class TeleAgentBot:
     async def on_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (update.effective_message.text or "").strip()
         if not text:
+            return
+        if self._awaiting and await self._handle_awaiting(text):
             return
         if await self._busy(update):
             return
@@ -707,6 +1052,10 @@ class TeleAgentBot:
                 return
             await self._create_project(root, item["name"])
             return
+        if data.startswith(("ag:", "agr:", "agm:", "agi:")):
+            await q.edit_message_reply_markup(None)
+            await self._agent_callback(data)
+            return
         verb, _, tok = data.partition(":")
         item = self.pending.pop(tok, None)
         if not item:
@@ -732,6 +1081,10 @@ class TeleAgentBot:
             await self._publish(item["project"], item["message"])
         elif action == "clone":
             await self._clone(item["name"], item["url"])
+        elif action == "agent_delete":
+            self.agents.delete(item["name"])
+            self.state.forget_agent(item["name"])
+            await self.notify(f"🗑️ Agente '{item['name']}' apagado.")
         elif action == "shutdown":
             await self.notify("⏻ Desligando: sincronizando memória e liberando a instância…")
             self.app.stop_running()
@@ -740,25 +1093,29 @@ class TeleAgentBot:
 
     def _start_task(self, name: str, path: Path, task_text: str, *, kind: str, display: str,
                     resume: str | None = None, extra_allowed: list[str] | None = None,
-                    task_header: str = "Tarefa do proprietário:") -> None:
+                    extra_dirs: list[str] | None = None, task_header: str = "Tarefa do proprietário:") -> None:
         self.task_meta = {"project": name, "display": display, "started": now_iso()}
         self.task = asyncio.create_task(self._run_task(name, path, task_text, kind=kind, display=display,
                                                        resume=resume, extra_allowed=extra_allowed,
-                                                       task_header=task_header))
+                                                       extra_dirs=extra_dirs, task_header=task_header))
 
     async def _run_task(self, name: str, path: Path, task_text: str, *, kind: str, display: str,
-                        resume: str | None, extra_allowed: list[str] | None, task_header: str) -> None:
+                        resume: str | None, extra_allowed: list[str] | None, task_header: str,
+                        extra_dirs: list[str] | None = None) -> None:
+        active_runner, model, agent = self._active_profile(name)
         st = self.memory.load(name)
         mem_task = self.memory.start_task(st, display, kind)
         self.memory.save(name, st)
         if resume is None:
-            resume = self.state.session_for(name)
+            resume = self.state.session_for(name, active_runner)
         self.state.running_task = {"project": name, "task_id": mem_task["id"], "prompt": display,
                                    "started": mem_task["started"]}
         prompt = PROMPT_TEMPLATE.format(name=name, path=path, machine=self.cfg.machine_name,
                                         context=render_context(st), task_header=task_header, task=task_text,
-                                        memory_instructions=MEMORY_INSTRUCTIONS)
-        status_msg = await self.notify(f"⏳ Executando em {name}…\n{truncate(display, 200)}")
+                                        memory_instructions=MEMORY_INSTRUCTIONS,
+                                        agent_section=_agent_section(agent))
+        who = f" [{agent.name}]" if agent else ""
+        status_msg = await self.notify(f"⏳ Executando em {name}{who}…\n{truncate(display, 200)}")
         last_edit = [0.0]
 
         def render(p: Progress) -> str:
@@ -767,6 +1124,77 @@ class TeleAgentBot:
             if p.last_text:
                 txt += f"\n💬 {truncate(p.last_text, 300)}"
             return txt
+
+        tick = asyncio.create_task(asyncio.sleep(0))  # placeholder
+
+        if active_runner == "opencode":
+            from .opencode_runner import OpenCodeProgress
+
+            def render_oc(p: OpenCodeProgress) -> str:
+                el = int(time.monotonic() - p.started)
+                txt = f"⏳ {name} [opencode] • {el // 60}m{el % 60:02d}s • {p.tool_calls} ações\n▶ {truncate(p.last_action, 200)}"
+                if p.last_text:
+                    txt += f"\n💬 {truncate(p.last_text, 300)}"
+                return txt
+
+            async def on_progress_oc(p: OpenCodeProgress):
+                if time.monotonic() - last_edit[0] >= 5:
+                    last_edit[0] = time.monotonic()
+                    await self.edit(status_msg, render_oc(p))
+
+            async def ticker_oc():
+                while True:
+                    await asyncio.sleep(30)
+                    if self.opencode.progress and time.monotonic() - last_edit[0] >= 25:
+                        last_edit[0] = time.monotonic()
+                        await self.edit(status_msg, render_oc(self.opencode.progress))
+
+            tick = asyncio.create_task(ticker_oc())
+            oc_result: OpenCodeResult | None = None
+            try:
+                oc_result = await self.opencode.run(
+                    path, prompt, session_id=resume, auto=False,
+                    model=model or None, on_progress=on_progress_oc, log_name=_safe_name(name),
+                )
+            except Exception as e:  # noqa: BLE001
+                log.exception("Falha ao executar o opencode")
+                oc_result = OpenCodeResult(is_error=True, text=f"Falha ao executar o opencode: {e}")
+            finally:
+                tick.cancel()
+
+            # Normaliza para o formato comum usado pelo restante do método.
+            if oc_result.session_id and not oc_result.cancelled:
+                self.state.set_session(name, oc_result.session_id, "opencode")
+            clean_text, block = extract_memory_block(oc_result.text)
+            status = oc_result.status
+            st = self.memory.load(name)
+            self.memory.finish_task(st, mem_task["id"], status, clean_text, block, oc_result.cost)
+            self.memory.save(name, st)
+            self.state.running_task = None
+
+            icon = {"success": "✅", "cancelled": "🛑", "timeout": "⌛", "error": "❌"}.get(status, "ℹ️")
+            label = {"success": "Concluído", "cancelled": "Cancelado", "timeout": "Tempo esgotado", "error": "Erro"}[status]
+            meta = [f"{oc_result.tool_calls} ações", f"${oc_result.cost:.4f}" if oc_result.cost else "grátis"]
+            await self.edit(status_msg, f"{icon} {label} em {name} [opencode] • " + " • ".join(meta))
+            body = clean_text.strip() or "(sem texto de resposta)"
+            if oc_result.timed_out:
+                body = f"Tarefa excedeu o tempo limite. Use /continuar para retomar.\n\n" + body
+            if oc_result.cancelled:
+                body = "Tarefa cancelada. Use /continuar para retomar."
+            await self.send_long(f"{icon} {label} — {name}\n\n{body}")
+            # Mostra as ferramentas negadas (sem botão de aprovação: opencode não tem --resume com regras)
+            if oc_result.denials and not oc_result.cancelled:
+                lines = ["⛔ O opencode tentou, mas foi bloqueado em:"]
+                for d in oc_result.denials[:5]:
+                    lines.append(f"• {d.tool}: {json.dumps(d.input)[:120]}")
+                lines.append("\nPara liberar, use /runner claude e reenvie a tarefa.")
+                await self.notify("\n".join(lines))
+            rep = await self.sync.sync(f"TeleAgent: {status} em {name}")
+            if not rep.ok:
+                await self.notify(f"⚠️ Memória salva localmente, mas a sincronização falhou: {rep.message}")
+            return
+
+        # ── Claude Code (runner padrão) ──────────────────────────────────────
 
         async def on_progress(p: Progress):
             if time.monotonic() - last_edit[0] >= 5:
@@ -784,13 +1212,15 @@ class TeleAgentBot:
         result: RunResult | None = None
         try:
             result = await self.runner.run(path, prompt, resume=resume, extra_allowed=extra_allowed,
-                                           on_progress=on_progress, log_name=_safe_name(name))
+                                           extra_dirs=extra_dirs, model=model or None, on_progress=on_progress,
+                                           log_name=_safe_name(name))
             if resume and result.status == "error" and not result.num_turns and not result.cancelled:
                 # Sessão inexistente nesta máquina (ou corrompida): recomeça com a memória.
                 log.info("Falha ao retomar sessão %s; iniciando sessão nova", resume)
                 self.state.set_session(name, None)
-                result = await self.runner.run(path, prompt, extra_allowed=extra_allowed,
-                                               on_progress=on_progress, log_name=_safe_name(name))
+                result = await self.runner.run(path, prompt, extra_allowed=extra_allowed, extra_dirs=extra_dirs,
+                                               model=model or None, on_progress=on_progress,
+                                               log_name=_safe_name(name))
         except Exception as e:  # noqa: BLE001
             log.exception("Falha ao executar o Claude Code")
             result = RunResult(is_error=True, text=f"Falha ao executar o Claude Code: {e}")
@@ -798,7 +1228,7 @@ class TeleAgentBot:
             tick.cancel()
 
         if result.session_id and not result.cancelled:
-            self.state.set_session(name, result.session_id)
+            self.state.set_session(name, result.session_id, "claude")
         clean_text, block = extract_memory_block(result.text)
         status = result.status
         st = self.memory.load(name)
@@ -845,10 +1275,13 @@ class TeleAgentBot:
             lines.append("\n(Sem ID de sessão para retomar; reenvie a tarefa.)")
             await self.notify("\n".join(lines))
             return
+        dirs = list(dict.fromkeys(d for r in offer for d in r.dirs))
+        if dirs:
+            lines.append("\n📂 Pastas fora do projeto que serão acessadas: " + ", ".join(dirs))
         lines.append("\nAprovar libera SOMENTE esses comandos exatos, numa continuação da mesma sessão.")
         tok = self._token({"action": "approve", "project": name, "session": result.session_id,
                            "rules": [r.rule for r in offer], "summaries": [f"{r.tool}: {r.summary}" for r in offer],
-                           "task_id": task_id})
+                           "dirs": dirs, "task_id": task_id})
         await self.notify("\n".join(lines), markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Aprovar e continuar", callback_data=f"ok:{tok}"),
             InlineKeyboardButton("❌ Recusar", callback_data=f"no:{tok}")]]))
@@ -859,11 +1292,16 @@ class TeleAgentBot:
         except PathError as e:
             await self.notify(f"❌ {e}")
             return
+        if self._active_profile(item["project"])[0] != "claude":
+            await self.notify("⚠️ O projeto agora usa o OpenCode; aprovações só retomam sessões do Claude Code. "
+                              "Selecione um agente Claude (/agentes) e reenvie a tarefa.")
+            return
         listing = "\n".join(f"- {s}" for s in item["summaries"])
         task = (f"O proprietário APROVOU as seguintes ações que foram negadas antes:\n{listing}\n"
                 "Execute exatamente essas ações (sem variações) e conclua a tarefa original.")
         self._start_task(item["project"], path, task, kind="approval", display="Aprovação: " + "; ".join(item["summaries"]),
-                         resume=item["session"], extra_allowed=item["rules"], task_header="Continuação:")
+                         resume=item["session"], extra_allowed=item["rules"], extra_dirs=item.get("dirs"),
+                         task_header="Continuação:")
 
     async def _record_refusal(self, item: dict) -> None:
         st = self.memory.load(item["project"])
@@ -971,6 +1409,13 @@ class TeleAgentBot:
         log.error("Erro não tratado", exc_info=err)
         if isinstance(update, Update) and update.effective_user and update.effective_user.id == self.cfg.owner_id:
             await self.notify(f"❌ Erro interno: {type(err).__name__}: {truncate(str(err), 500)}")
+
+
+def _agent_section(agent: Agent | None) -> str:
+    if not agent or not agent.instructions:
+        return ""
+    return (f"\nVocê é o agente \"{agent.name}\". Instruções do agente definidas pelo proprietário "
+            f"(seguem valendo junto com as regras acima):\n{agent.instructions}\n")
 
 
 def _safe_name(name: str) -> str:

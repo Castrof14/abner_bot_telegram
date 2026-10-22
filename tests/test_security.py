@@ -64,7 +64,25 @@ def test_review_denial_categories(tmp_path):
     w = review_denial({"tool_name": "Write", "tool_input": {"file_path": "/etc/hosts"}}, p)
     assert not w.offer
     w = review_denial({"tool_name": "Write", "tool_input": {"file_path": str(p / "a.txt")}}, p)
-    assert w.offer
+    assert w.offer and not w.dirs and w.rule == f"Edit(/{(p / 'a.txt').resolve()})"
+
+
+def test_review_denial_outside_project_needs_approval(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    proj = home / "projetos" / "teste"
+    docs = home / "Documents"
+    proj.mkdir(parents=True)
+    docs.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    r = review_denial({"tool_name": "Bash", "tool_input": {"command": f"mkdir {docs}/macabner"}}, proj)
+    assert r.offer and r.category == "fora do projeto" and r.dirs == [str(docs.resolve())]
+    r = review_denial({"tool_name": "Bash", "tool_input": {"command": f"mv Testandobot {docs}/"}}, proj)
+    assert r.offer and r.category == "mover/sobrescrever" and r.rule == f"Bash(mv Testandobot {docs}/)"
+    w = review_denial({"tool_name": "Write", "tool_input": {"file_path": str(docs / "nota.txt")}}, proj)
+    assert w.offer and w.rule == f"Edit(/{(docs / 'nota.txt').resolve()})" and w.dirs == [str(docs.resolve())]
+    # Exclusões fora do projeto, pastas sensíveis, a própria home e fora da home continuam bloqueadas.
+    for cmd in (f"rm -r {docs}/x", f"mkdir {home}/.ssh/x", f"touch {home}", "mkdir /etc/x"):
+        assert not review_denial({"tool_name": "Bash", "tool_input": {"command": cmd}}, proj).offer, cmd
 
 
 def test_deny_rules_only_lift_matching():
