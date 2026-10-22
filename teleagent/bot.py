@@ -1156,6 +1156,14 @@ class TeleAgentBot:
                     path, prompt, session_id=resume, auto=False,
                     model=model or None, on_progress=on_progress_oc, log_name=_safe_name(name),
                 )
+                if resume and oc_result.is_error and not oc_result.tool_calls and not oc_result.cancelled:
+                    # Sessão antiga inválida (ex.: pasta do projeto mudou): recomeça com a memória.
+                    log.info("Falha ao retomar sessão opencode %s; iniciando sessão nova", resume)
+                    self.state.set_session(name, None)
+                    oc_result = await self.opencode.run(
+                        path, prompt, auto=False,
+                        model=model or None, on_progress=on_progress_oc, log_name=_safe_name(name),
+                    )
             except Exception as e:  # noqa: BLE001
                 log.exception("Falha ao executar o opencode")
                 oc_result = OpenCodeResult(is_error=True, text=f"Falha ao executar o opencode: {e}")

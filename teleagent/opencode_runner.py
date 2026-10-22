@@ -89,6 +89,7 @@ class OpenCodeResult:
     stderr_tail: str = ""
     log_path: Path | None = None
     tool_calls: int = 0
+    error_message: str = ""
 
     @property
     def status(self) -> str:
@@ -232,6 +233,11 @@ class OpenCodeRunner:
                                 error=err,
                             ))
 
+                elif etype == "error":
+                    err = ev.get("error") or {}
+                    result.is_error = True
+                    result.error_message = (err.get("data") or {}).get("message") or err.get("name") or "erro"
+
                 elif etype == "step_finish":
                     cost = part.get("cost", 0) or 0
                     result.cost += cost
@@ -267,6 +273,8 @@ class OpenCodeRunner:
         if log_path and log_lines:
             log_path.write_text("\n".join(log_lines) + "\n", encoding="utf-8")
 
+        if result.error_message and not result.text:
+            result.text = f"O opencode retornou erro: {result.error_message}"
         if proc.returncode not in (0, None) and not result.text and not result.cancelled:
             result.is_error = True
             if result.stderr_tail:

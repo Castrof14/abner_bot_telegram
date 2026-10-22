@@ -102,3 +102,31 @@ def test_delete_agent_clears_selection(cfg):
     tok = next(k for k, v in agent.pending.items() if v["action"] == "agent_delete")
     press(agent, f"ok:{tok}")
     assert agent.agents.get("tmp") is None and agent.state.agent_for("app") is None
+
+
+def test_opencode_bad_session_falls_back_to_new(cfg, tmp_path):
+    import stat
+    import sys
+    fake = tmp_path / "bin" / "opencode"
+    fake.write_text(f"""#!{sys.executable}
+import json, sys
+if "--session" in sys.argv:
+    print(json.dumps({{"type": "error", "sessionID": "ses_x", "error": {{"name": "UnknownError",
+          "data": {{"message": "Unexpected server error."}}}}}}))
+else:
+    print(json.dumps({{"type": "text", "sessionID": "ses_new", "part": {{"type": "text", "text": "feito"}}}}))
+""")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    agent = make_agent(cfg)
+    agent.opencode.opencode_bin = str(fake)
+    agent.state.selected_project = "app"
+    agent.agents.put(Agent(name="isa", runner="opencode", model="opencode/big-pickle"))
+    agent.state.set_agent("app", "isa")
+    agent.state.set_session("app", "ses_velha", "opencode")
+
+    async def run():
+        await agent.on_text(update(text="faça algo"), ctx())
+        await agent.task
+    asyncio.run(run())
+    assert any("feito" in m["text"] for m in agent.tg.sent)
+    assert agent.state.session_for("app", "opencode") == "ses_new"
