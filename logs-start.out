@@ -1,0 +1,6 @@
+2026-10-21 23:26:31,834 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-21 23:26:33,462 INFO    telegram.ext.Application: Application started
+2026-10-21 23:28:42,733 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=3c5139f1-714b-4f3e-b3fd-20bffdbaed9b)
+2026-10-21 23:44:57,732 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-21 23:44:57,733 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-21 23:44:57,880 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).

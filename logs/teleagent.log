@@ -1,0 +1,32 @@
+2026-10-21 22:18:34,871 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-21 22:18:37,033 INFO    telegram.ext.Application: Application started
+2026-10-21 22:21:05,160 WARNING teleagent.bot: Erro de rede (o polling tentará novamente): httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-10-21 22:21:06,167 WARNING teleagent.bot: Erro de rede (o polling tentará novamente): httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-10-21 22:21:07,674 WARNING teleagent.bot: Erro de rede (o polling tentará novamente): httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-10-21 22:21:09,931 WARNING teleagent.bot: Erro de rede (o polling tentará novamente): httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-10-21 22:21:13,322 WARNING teleagent.bot: Erro de rede (o polling tentará novamente): httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-10-21 22:21:18,393 WARNING teleagent.bot: Erro de rede (o polling tentará novamente): httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-10-21 22:21:25,994 WARNING teleagent.bot: Erro de rede (o polling tentará novamente): httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-10-21 22:28:41,844 WARNING teleagent.bot: Erro de rede (o polling tentará novamente): httpx.ConnectError: [Errno 8] nodename nor servname provided, or not known
+2026-10-21 22:54:37,429 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-21 22:54:37,431 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-21 22:54:37,558 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-21 22:54:38,848 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-21 22:54:40,446 INFO    telegram.ext.Application: Application started
+2026-10-21 22:56:36,286 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=None)
+2026-10-21 23:08:20,619 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-21 23:08:20,621 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-21 23:08:20,712 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-21 23:08:21,680 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-21 23:08:23,406 INFO    telegram.ext.Application: Application started
+2026-10-21 23:08:37,267 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=3c5139f1-714b-4f3e-b3fd-20bffdbaed9b)
+2026-10-21 23:17:40,544 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=3c5139f1-714b-4f3e-b3fd-20bffdbaed9b)
+2026-10-21 23:26:29,913 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-21 23:26:29,915 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-21 23:26:29,999 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-21 23:26:31,834 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-21 23:26:33,462 INFO    telegram.ext.Application: Application started
+2026-10-21 23:28:42,733 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=3c5139f1-714b-4f3e-b3fd-20bffdbaed9b)
+2026-10-21 23:44:57,732 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-21 23:44:57,733 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-21 23:44:57,880 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
