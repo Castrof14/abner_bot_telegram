@@ -30,3 +30,76 @@
 2026-10-21 23:44:57,732 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
 2026-10-21 23:44:57,733 INFO    telegram.ext.Application: Application.stop() complete
 2026-10-21 23:44:57,880 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-22 14:05:41,854 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-22 14:05:43,578 INFO    telegram.ext.Application: Application started
+2026-10-22 14:05:52,420 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=3c5139f1-714b-4f3e-b3fd-20bffdbaed9b)
+2026-10-22 14:14:22,104 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-22 14:14:22,107 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-22 14:14:22,235 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-22 14:14:25,954 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-22 14:14:27,433 INFO    telegram.ext.Application: Application started
+2026-10-22 14:15:50,161 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=None)
+2026-10-22 14:16:50,032 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=b174e3bb-0d26-42ec-b03a-dc034a486cdd)
+2026-10-22 14:17:56,335 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=b174e3bb-0d26-42ec-b03a-dc034a486cdd)
+2026-10-22 14:18:14,273 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=b174e3bb-0d26-42ec-b03a-dc034a486cdd)
+2026-10-22 14:18:41,031 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=b174e3bb-0d26-42ec-b03a-dc034a486cdd)
+2026-10-22 14:22:58,893 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-22 14:22:58,897 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-22 14:22:59,098 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-22 14:23:07,747 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-22 14:23:09,403 INFO    telegram.ext.Application: Application started
+2026-10-22 14:23:52,110 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=b174e3bb-0d26-42ec-b03a-dc034a486cdd)
+2026-10-22 14:25:22,475 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=b174e3bb-0d26-42ec-b03a-dc034a486cdd)
+2026-10-22 14:27:53,071 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-22 14:27:53,074 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-22 14:27:53,201 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-22 14:28:15,906 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-22 14:28:17,495 INFO    telegram.ext.Application: Application started
+2026-10-22 14:28:43,942 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=None)
+2026-10-22 14:29:07,732 INFO    teleagent.claude_runner: Claude Code em /Users/abner/projetos/teste (resume=0d2f1745-5232-49f1-a407-5d358835a895)
+2026-10-22 14:39:45,035 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-22 14:39:45,038 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-22 14:39:45,166 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-22 14:39:54,756 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-22 14:39:56,259 INFO    telegram.ext.Application: Application started
+2026-10-22 15:00:14,281 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-22 15:00:14,283 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-22 15:00:14,431 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-22 17:01:29,641 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-22 17:01:31,146 INFO    telegram.ext.Application: Application started
+2026-10-22 17:09:23,756 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-22 17:09:23,757 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-22 17:09:23,875 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-22 17:09:32,456 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-22 17:09:33,898 INFO    telegram.ext.Application: Application started
+2026-10-22 17:15:55,264 INFO    teleagent.opencode_runner: opencode em /Users/abner/projetos/teste (session=None model=opencode/big-pickle auto=False)
+2026-10-22 17:16:14,778 INFO    teleagent.opencode_runner: opencode em /Users/abner/projetos/teste (session=ses_e9abe770effeoaagIOScBYksCc model=opencode/big-pickle auto=False)
+2026-10-22 17:23:35,201 INFO    teleagent.opencode_runner: opencode em /Users/abner/projetos/Central_do_Abner (session=None model=opencode/big-pickle auto=False)
+2026-10-22 17:25:25,192 INFO    teleagent.opencode_runner: opencode em /Users/abner/projetos/Central_do_Abner (session=ses_e9ab77295ffeoLKwDbMM2IdR75 model=opencode/big-pickle auto=False)
+2026-10-22 17:27:11,623 INFO    teleagent.opencode_runner: opencode em /Users/abner/projetos/Central_do_Abner (session=ses_e9ab5c4d4ffe0CVnhSDn7wkLs2 model=opencode/big-pickle auto=False)
+2026-10-22 17:31:07,413 INFO    teleagent.opencode_runner: opencode em /Users/abner/projetos/Central_do_Abner (session=ses_e9ab42519ffecvsiiXBQROSBAD model=opencode/big-pickle auto=False)
+2026-10-22 17:36:53,682 INFO    teleagent.opencode_runner: opencode em /Users/abner/projetos/Central_do_Abner (session=ses_e9ab08c01ffeH94621BG2SAHmH model=opencode/glm-5.3-flash-free auto=False)
+2026-10-22 17:42:34,925 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-22 17:42:34,929 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-22 17:42:35,052 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-22 17:42:42,657 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-22 17:42:44,115 INFO    telegram.ext.Application: Application started
+2026-10-22 17:45:18,388 INFO    teleagent.opencode_runner: opencode em /Users/abner/Documents/GitHub/Central_do_Abner (session=ses_e9aab4370ffeSy0rUd1z4974aK model=opencode/glm-5.3-flash-free auto=False)
+2026-10-22 17:58:07,074 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-22 17:58:07,077 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-22 17:58:07,203 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-22 17:58:20,752 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-22 17:58:22,211 INFO    telegram.ext.Application: Application started
+2026-10-22 17:59:07,087 INFO    teleagent.opencode_runner: opencode em /Users/abner/Documents/GitHub/Central_do_Abner (session=ses_e9aa38fe2ffejTqbIHIA8ak5Zo model=opencode/glm-5.3-flash-free auto=False)
+2026-10-22 17:59:09,086 INFO    teleagent.bot: Falha ao retomar sessão opencode ses_e9aa38fe2ffejTqbIHIA8ak5Zo; iniciando sessão nova
+2026-10-22 17:59:09,089 INFO    teleagent.opencode_runner: opencode em /Users/abner/Documents/GitHub/Central_do_Abner (session=None model=opencode/glm-5.3-flash-free auto=False)
+2026-10-22 18:04:43,266 INFO    teleagent.opencode_runner: opencode em /Users/abner/Documents/GitHub/Central_do_Abner (session=ses_e9a96e459ffe2daAHaeuiLBq87 model=opencode/glm-5.3-flash-free auto=False)
+2026-10-22 18:15:34,230 INFO    teleagent.opencode_runner: opencode em /Users/abner/Documents/GitHub/Central_do_Abner (session=ses_e9a91c8d6ffeP9wOj754H5bTYO model=opencode/glm-5.3-flash-free auto=False)
+2026-10-22 18:20:55,366 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-22 18:20:55,371 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-22 18:20:55,541 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).
+2026-10-23 18:14:58,267 INFO    teleagent.bot: Nenhuma outra máquina ativa.
+2026-10-23 18:14:59,913 INFO    telegram.ext.Application: Application started
+2026-10-23 18:47:14,929 INFO    telegram.ext.Application: Application is stopping. This might take a moment.
+2026-10-23 18:47:14,933 INFO    telegram.ext.Application: Application.stop() complete
+2026-10-23 18:47:15,087 INFO    teleagent.bot: Lease liberada: Memória salva localmente (sem repositório remoto configurado).

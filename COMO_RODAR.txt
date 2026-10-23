@@ -1,0 +1,100 @@
+COMO RODAR O TELEAGENT (BOT DO TELEGRAM) MANUALMENTE
+=====================================================
+
+O bot precisa ficar com a janela do terminal ABERTA enquanto estiver
+funcionando. Fechou o terminal = o bot para.
+
+
+REQUISITOS (nos dois sistemas)
+------------------------------
+- Python 3.10 ou mais novo
+- Claude Code CLI instalado e com login feito (rode "claude" uma vez)
+- Git (so se for usar a sincronizacao de memoria entre computadores)
+- Token do bot (@BotFather) e seu ID do Telegram (@userinfobot)
+
+
+=====================================================
+MAC (macOS / Linux)
+=====================================================
+
+1) Abra o Terminal e entre na pasta do projeto:
+
+     cd ~/Documents/Github/abner_bot_telegram
+
+2) PRIMEIRA VEZ (configuracao). Se o arquivo .env ainda nao existe:
+
+     ./setup.sh
+
+   (Se der "permission denied":  chmod +x setup.sh start.sh)
+   O assistente pede o token e o ID e cria o .env sozinho.
+
+3) INICIAR O BOT:
+
+     ./start.sh
+
+   Na primeira execucao ele cria o ambiente virtual (.venv) e instala as
+   dependencias automaticamente.
+
+4) PARAR O BOT: pressione  Ctrl + C  no terminal.
+
+Rodar em segundo plano (continua mesmo fechando o terminal):
+
+     nohup ./start.sh > logs-start.out 2>&1 &
+
+   Para parar depois:
+
+     pkill -f "teleagent run"
+
+Se aparecer erro de "outra instancia rodando": use  ./start.sh --takeover
+
+Comandos uteis:
+     .venv/bin/python -m teleagent check     (diagnostico do ambiente)
+     .venv/bin/python -m teleagent setup     (refazer a configuracao)
+
+
+=====================================================
+WINDOWS
+=====================================================
+
+1) Instale o Python em https://www.python.org
+   (marque a opcao "Add Python to PATH" durante a instalacao).
+
+2) Abra o Prompt de Comando (cmd) ou PowerShell e entre na pasta:
+
+     cd C:\caminho\para\telegram-bot
+
+3) PRIMEIRA VEZ (configuracao). Se o arquivo .env ainda nao existe:
+
+     setup.bat
+
+   O assistente pede o token e o ID e cria o .env.
+   (No PowerShell, use  .\setup.bat )
+
+4) INICIAR O BOT:
+
+     start.bat
+
+   (No PowerShell:  .\start.bat )
+   Na primeira execucao ele cria o .venv e instala as dependencias.
+
+5) PARAR O BOT: pressione  Ctrl + C  na janela.
+
+Se aparecer erro de "outra instancia rodando": use  start.bat --takeover
+
+Comandos uteis:
+     .venv\Scripts\python.exe -m teleagent check     (diagnostico)
+     .venv\Scripts\python.exe -m teleagent setup     (refazer configuracao)
+
+
+=====================================================
+USANDO O BOT
+=====================================================
+Depois de iniciado, abra o Telegram, va na conversa com o seu bot e
+mande /start. Somente o dono (TELEGRAM_OWNER_ID no .env) consegue usar.
+
+PROBLEMAS COMUNS
+- "python nao encontrado": instale o Python 3.10+ (no Windows, com PATH).
+- "claude nao encontrado": instale o Claude Code e defina CLAUDE_BIN no .env.
+- Bot nao responde: confira o token e o ID no arquivo .env e rode o
+  comando "check" acima.
+- Mais detalhes: veja o README.md na pasta do projeto.

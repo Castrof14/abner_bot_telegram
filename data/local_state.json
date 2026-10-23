@@ -1,7 +1,14 @@
 {
+  "agents": {
+    "Central_do_Abner": "Michelle",
+    "teste": "Reflex"
+  },
   "running_task": null,
-  "selected_project": "teste",
+  "selected_project": "Central_do_Abner",
+  "session_runners": {
+    "Central_do_Abner": "opencode"
+  },
   "sessions": {
-    "teste": "3c5139f1-714b-4f3e-b3fd-20bffdbaed9b"
+    "Central_do_Abner": "ses_e9a87da06ffemznxP3oAskbgKP"
   }
 }
